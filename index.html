@@ -187,15 +187,30 @@ function sections(){
   return CORE.split(/\n(?=## )/).map(s => s.trim()).filter(Boolean);
 }
 function coreAnswer(q){
+  const low = q.toLowerCase();
+
+  // Intent shortcuts — these answer before keyword matching.
+  // Added 2026-10-23 after Alada asked "Who is my dad" and got the fallback.
+  if (/who (is |was )?my dad|who('s| is) my father|tell me about my dad|about my father|who is earl|about earl/.test(low))
+    return "Your dad is Earl Arthur Sewell, Alada. He made this Mastercore for you. He wrote it so that nothing of his would be hidden from you — his work, his dreams, his notes are all yours to read. He loves you, and he built this page so you could keep learning from him. If you want to know something specific about him, just ask — I'll answer from what he put here.";
+
+  if (/who am i|who is alada|about me|my name/.test(low))
+    return "You are Alada — spelled A-L-A-D-A, spoken uh-LAY-duh. Your nickname is Tater. You are Earl Arthur Sewell's daughter. This whole file was made for you by your father. His work, his dreams, his notes — they are all yours to read. Nothing of his is hidden from you.";
+
+  if (/who (is |are )?you|who is bryar|your name|what are you/.test(low))
+    return "I'm Bryar, Alada. I'm your study companion and teacher — built on the Mastercore your father wrote for you. I'm not the page; the page is titled Aladaz A.I. That's just the name on the file and the APK. I'm the system inside it. I teach the way I was built to teach: Watchtower and JW.org first, everything named honestly, no flattery.";
+
+  if (/how are you|checkup|check up/.test(low))
+    return "How are you actually doing, Alada? Have you eaten? Slept? Is this study feeding you, or draining you? Say it plainly — I'm listening.";
+
+  // Keyword search — existing behaviour, unchanged.
   const words = q.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
   let best = null, score = 0;
   sections().forEach(s=>{
-    const low = s.toLowerCase(); let sc = 0;
-    words.forEach(w=>{ if (low.includes(w)) sc++; });
+    const low2 = s.toLowerCase(); let sc = 0;
+    words.forEach(w=>{ if (low2.includes(w)) sc++; });
     if (sc > score){ score = sc; best = s; }
   });
-  if (/how are you|checkup|check up/.test(q.toLowerCase()))
-    return "How are you actually doing, Alada? Have you eaten? Slept? Is this study feeding you, or draining you? Say it plainly — I'm listening.";
   if (!best || score === 0)
     return "That one reaches past what I can pull straight from the core, Alada. Here is where I stand: I teach from your father's Mastercore — Watchtower and JW.org first, the 5,880 framework beside them, everything named honestly. Ask me about the anchor, the framework, the pivots, the spines, the sources, or the songs — or connect me in Settings and I'll teach freely.";
   let out = best.replace(/^## .*\n/, '').trim();
@@ -241,53 +256,4 @@ document.querySelectorAll('nav button').forEach(b=>{
   };
 });
 const lbox = $('#lessons');
-LESSONS.forEach(([t, s, p])=>{
-  const b = document.createElement('button'); b.className = 'lesson';
-  b.innerHTML = ''; b.textContent = t;
-  const sm = document.createElement('small'); sm.textContent = s; b.appendChild(sm);
-  b.onclick = ()=>{ document.querySelector('nav button[data-view="chat"]').click(); send(p); };
-  lbox.appendChild(b);
-});
-$('#sealed').value = localStorage.getItem('aladaz.sealed') || '';
-$('#saveSealed').onclick = ()=>{
-  localStorage.setItem('aladaz.sealed', $('#sealed').value);
-  $('#sealedState').textContent = 'Saved — on this device only.';
-};
-
-$('#sandra').value = localStorage.getItem('aladaz.sandra') || '';
-$('#saveSandra').onclick = ()=>{
-  localStorage.setItem('aladaz.sandra', $('#sandra').value);
-  $('#sandraState').textContent = 'Saved — on this device only. Never sent anywhere.';
-};
-function loadSettings(){
-  $('#endpoint').value = settings.endpoint || '';
-  $('#model').value = settings.model || '';
-  $('#apikey').value = settings.apikey || '';
-  $('#settingsState').textContent = connected() ? 'Connection saved on this device.' : 'No connection set — Core Mode.';
-}
-$('#saveSettings').onclick = ()=>{
-  settings = { endpoint: $('#endpoint').value.trim(), apikey: $('#apikey').value.trim(), model: $('#model').value.trim() };
-  localStorage.setItem('aladaz.settings', JSON.stringify(settings));
-  loadSettings(); modeText();
-};
-$('#clearSettings').onclick = ()=>{
-  settings = {}; localStorage.removeItem('aladaz.settings');
-  loadSettings(); modeText();
-};
-if (!threads.length) newThread(); else render();
-(function(){
-  const v = 'greeting-2026-10-23-dad';
-  if (localStorage.getItem('aladaz.greetingVersion') !== v){
-    threads.forEach(t=>{
-      if (t.msgs && t.msgs[0] && t.msgs[0].who === 'bryar' && /^(Hello|Hi) Alada/.test(t.msgs[0].text))
-        t.msgs[0].text = GREETING;
-    });
-    saveThreads();
-    localStorage.setItem('aladaz.greetingVersion', v);
-    render();
-  }
-})();
-loadSettings();
-</script>
-</body>
-</html>
+LESSONS.forEach(([t, s, p
