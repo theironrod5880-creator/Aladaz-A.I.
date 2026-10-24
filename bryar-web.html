@@ -22,6 +22,10 @@
   #composer{ display:flex; gap:.5rem; position:sticky; bottom:1rem; background:var(--paper); padding-top:1rem; }
   #input{ flex:1; font-family:inherit; font-size:1rem; padding:.6rem; border:1px solid var(--rule); border-radius:.6rem; background:#fff; }
   #send{ font-family:inherit; font-size:1rem; padding:.6rem 1rem; background:var(--accent); color:var(--paper); border:none; border-radius:.6rem; cursor:pointer; }
+  
+  /* Added disabled state */
+  #send:disabled, #input:disabled { opacity: 0.5; cursor: not-allowed; }
+  
   .mode{ font-size:.8rem; color:#6b6355; font-style:italic; margin-top:.5rem; text-align:center; }
   footer{ text-align:center; font-size:.8rem; color:#5c554a; padding:1.2rem 1rem 2rem; border-top:1px solid var(--rule); }
   .seal{ text-align:center; font-size:1.05rem; letter-spacing:.15em; margin:.4rem 0; }
@@ -58,6 +62,7 @@ const $ = s => document.querySelector(s);
 let coreText = "";
 let isReady = false;
 let msgs = [{ who:'bryar', text:GREETING }];
+let cooldownTimer = null;
 
 function renderMsgs(){
   const box = $('#msgs'); box.innerHTML = '';
@@ -96,11 +101,12 @@ async function send(text){
   const q = (text !== undefined ? text : $('#input').value).trim();
   if (!q || !isReady) return;
   
+  // 1. Clear input and lock down the UI
   $('#input').value = ''; 
+  $('#input').disabled = true;
+  $('#send').disabled = true;
+  
   msgs.push({ who:'alada', text:q });
-  renderMsgs();
-
-  // Add thinking indicator
   msgs.push({ who:'bryar', text:'…' });
   renderMsgs();
 
@@ -116,7 +122,7 @@ async function send(text){
   ];
 
   try {
-    // Pollinations.ai free endpoint (no key required)
+    // Pollinations.ai free endpoint
     const r = await fetch('https://text.pollinations.ai/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -131,10 +137,31 @@ async function send(text){
     const answer = await r.text();
     msgs[msgs.length - 1].text = answer; // Replace "…"
   } catch (e) {
-    msgs[msgs.length - 1].text = "I couldn't reach the free AI just now (" + e.message + "). Check your internet, or open the offline version (aladaz-ai.html).";
+    msgs[msgs.length - 1].text = "I couldn't reach the free AI just now (" + e.message + "). Please wait a moment and try again.";
   }
 
   renderMsgs();
+  
+  // 2. Start the 30-second cooldown
+  let timeLeft = 30;
+  $('#mode').textContent = `Please wait ${timeLeft}s before asking again…`;
+  $('#mode').style.color = '#b35c00';
+
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  
+  cooldownTimer = setInterval(() => {
+    timeLeft--;
+    if (timeLeft > 0) {
+      $('#mode').textContent = `Please wait ${timeLeft}s before asking again…`;
+    } else {
+      clearInterval(cooldownTimer);
+      $('#mode').textContent = 'Connected — fetching real answers via Pollinations.ai';
+      $('#mode').style.color = '#6b6355';
+      $('#input').disabled = false;
+      $('#send').disabled = false;
+      $('#input').focus();
+    }
+  }, 1000);
 }
 
 $('#send').onclick = ()=> send();
