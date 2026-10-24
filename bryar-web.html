@@ -43,7 +43,7 @@
     <input id="input" type="text" placeholder="Ask Bryar…" autocomplete="off">
     <button id="send">Send</button>
   </div>
-  <div class="mode" id="mode">Loading core from GitHub…</div>
+  <div class="mode" id="mode">Loading index from GitHub…</div>
 </main>
 <footer>
   <div class="seal">🔥📖⚔️🛡️✍️👁️✅</div>
@@ -54,15 +54,19 @@
 <script>
 const REPO_USER = "theironrod5880-creator";
 const REPO_NAME = "Aladaz-A.I.";
-const CORE_URL = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/mastercore.md`;
+const ASSETS_URL = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/assets.json`;
 
 const GREETING = "Hi Alada, how are you? What would you like to know about your dad?";
 const $ = s => document.querySelector(s);
 
-let coreText = "";
 let isReady = false;
 let msgs = [{ who:'bryar', text:GREETING }];
 let cooldownTimer = null;
+
+// Search Index Data
+let sections = []; 
+let invertedIndex = {};
+let docFreq = {};
 
 function renderMsgs(){
   const box = $('#msgs'); box.innerHTML = '';
@@ -77,26 +81,103 @@ function renderMsgs(){
   box.lastElementChild && box.lastElementChild.scrollIntoView({ behavior:'smooth', block:'end' });
 }
 
-async function loadCore() {
+// 1. The Indexer
+async function buildIndex() {
   try {
-    const r = await fetch(CORE_URL);
-    if (!r.ok) throw new Error("Core file not found in repo. Using fallback.");
-    coreText = await r.text();
+    // Get the list of files
+    const r = await fetch(ASSETS_URL);
+    if (!r.ok) throw new Error("assets.json not found");
+    const files = await r.json();
+    
+    let totalSections = 0;
+
+    // Loop through each file
+    for (const file of files) {
+      const url = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/${file}`;
+      const fr = await fetch(url);
+      if (!fr.ok) {
+        console.warn("Could not load file: " + file);
+        continue;
+      }
+      const text = await fr.text();
+
+      // Chop into sections by "## " (Markdown headings)
+      // Or by double line breaks if there are no headings
+      let chunks = text.split(/\n(?=## )/);
+      if (chunks.length === 1) chunks = text.split(/\n\n/);
+
+      chunks.forEach((chunk, i) => {
+        chunk = chunk.trim();
+        if (chunk.length < 20) return; // Skip tiny fragments
+
+        const id = sections.length;
+        sections.push({ id, file, text: chunk });
+
+        // Tokenize: lowercase, strip punctuation, split by space
+        const words = chunk.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        const uniqueWords = new Set(words);
+
+        uniqueWords.forEach(w => {
+          if (w.length < 3) return; // Skip "the", "is", "at"
+          if (!invertedIndex[w]) invertedIndex[w] = new Set();
+          invertedIndex[w].add(id);
+          
+          // THIS IS THE FIX:
+          docFreq[w] = (docFreq[w] || 0) + 1;
+        });
+        totalSections++;
+      });
+    }
+
     isReady = true;
-    $('#statusBadge').textContent = 'Connected';
+    $('#statusBadge').textContent = 'Indexed';
     $('#statusBadge').style.background = '#4a6b2d';
-    $('#mode').textContent = 'Connected — fetching real answers via Pollinations.ai';
+    $('#mode').textContent = `Connected — Indexed ${totalSections} sections across ${files.length} files.`;
+
   } catch (e) {
     console.warn(e);
-    // Fallback minimal core so the page never breaks
-    coreText = "You are Bryar. You teach Alada from her father Earl Arthur Sewell's work. The Floor: Watchtower and JW.org speak first.";
     isReady = true;
     $('#statusBadge').textContent = 'Fallback Mode';
     $('#statusBadge').style.background = '#b35c00';
-    $('#mode').textContent = 'Could not load mastercore.md from the repo. Using local fallback.';
+    $('#mode').textContent = 'Could not load assets.json. Using local fallback.';
+    sections.push({ id: 0, file: 'fallback', text: 'You are Bryar. You teach Alada from her father Earl Arthur Sewell\'s work.' });
   }
 }
 
+// 2. The Search Function
+function searchIndex(query) {
+  const words = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+  let scores = {};
+
+  words.forEach(w => {
+    if (w.length < 3) return;
+    if (invertedIndex[w]) {
+      invertedIndex[w].forEach(id => {
+        scores[id] = (scores[id] || 0) + 1;
+      });
+    }
+  });
+
+  // Sort sections by score (highest match first)
+  const sortedIds = Object.keys(scores).sort((a,b) => scores[b] - scores[a]);
+  
+  // Return the text of the top 3 matching sections
+  let resultText = "";
+  const topIds = sortedIds.slice(0, 3);
+  
+  topIds.forEach(id => {
+    resultText += `\n\n--- Source: ${sections[id].file} ---\n${sections[id].text}`;
+  });
+
+  // If no matches, just grab the first section (usually the intro)
+  if (!resultText && sections.length > 0) {
+    resultText = sections[0].text;
+  }
+
+  return resultText;
+}
+
+// 3. The Chat Loop
 async function send(text){
   const q = (text !== undefined ? text : $('#input').value).trim();
   if (!q || !isReady) return;
@@ -110,39 +191,34 @@ async function send(text){
   msgs.push({ who:'bryar', text:'…' });
   renderMsgs();
 
-  const systemPrompt = `Your name is Bryar. You are the messenger and teacher for Alada, built on the Mastercore her father, Earl Arthur Sewell, made for her. Speak plainly and warmly to Alada. Here is your core: \n\n${coreText}`;
+  // Fetch the relevant text based on the query
+  const contextText = searchIndex(q);
+
+  const systemPrompt = `Your name is Bryar. You are the messenger and teacher for Alada. Answer her question using ONLY the source text provided below. Speak plainly and warmly to Alada. Here is the source text:\n${contextText}`;
   
-  // Format history for API
   const apiMsgs = [
     { role: 'system', content: systemPrompt },
-    ...msgs.slice(1, -1).map(m => ({
-      role: m.who === 'bryar' ? 'assistant' : 'user',
-      content: m.text
-    }))
+    { role: 'user', content: q }
   ];
 
   try {
-    // Pollinations.ai free endpoint
     const r = await fetch('https://text.pollinations.ai/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: apiMsgs,
-        model: 'openai'
-      })
+      body: JSON.stringify({ messages: apiMsgs, model: 'openai' })
     });
 
     if (!r.ok) throw new Error('Connection answered ' + r.status);
     
     const answer = await r.text();
-    msgs[msgs.length - 1].text = answer; // Replace "…"
+    msgs[msgs.length - 1].text = answer;
   } catch (e) {
     msgs[msgs.length - 1].text = "I couldn't reach the free AI just now (" + e.message + "). Please wait a moment and try again.";
   }
 
   renderMsgs();
   
-  // 2. Start the 30-second cooldown
+  // Cooldown Timer
   let timeLeft = 30;
   $('#mode').textContent = `Please wait ${timeLeft}s before asking again…`;
   $('#mode').style.color = '#b35c00';
@@ -169,7 +245,7 @@ $('#input').addEventListener('keydown', e=>{ if (e.key === 'Enter') send(); });
 
 // Init
 renderMsgs();
-loadCore();
+buildIndex();
 </script>
 </body>
 </html>
