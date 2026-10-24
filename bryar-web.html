@@ -192,7 +192,18 @@ async function send(text){
   renderMsgs();
 
   // Fetch the relevant text based on the query
-  const contextText = searchIndex(q);
+  // 1. Check for specific intent questions first
+const low = q.toLowerCase();
+let contextText = "";
+
+if (/who (is |was )?my dad|who('s| is) my father|tell me about my dad|about my father|who is earl|about earl/.test(low)) {
+  contextText = "Your dad is Earl Arthur Sewell. He made this Mastercore for you. He loves you, and he built this page so you could keep learning from him.";
+} else if (/who am i|who is alada|about me|my name/.test(low)) {
+  contextText = "You are Alada — spelled A-L-A-D-A, spoken uh-LAY-duh. Your nickname is Tater. You are Earl Arthur Sewell's daughter. This whole file was made for you by your father.";
+} else {
+  // 2. If not a specific question, run the search
+  contextText = searchIndex(q);
+}
 
   const systemPrompt = `Your name is Bryar. You are the messenger and teacher for Alada. Answer her question using ONLY the source text provided below. Speak plainly and warmly to Alada. Here is the source text:\n${contextText}`;
   
