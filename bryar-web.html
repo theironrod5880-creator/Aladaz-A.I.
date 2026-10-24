@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aladaz A.I. — Web</title>
+<style>
+  :root{ --ink:#17111f; --paper:#ffffff; --rule:#dccdea; --accent:#7b2d8e; --soft:#fdeef7; --pink:#f06ba8; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:Georgia,'Times New Roman',serif; }
+  header{ text-align:center; padding:1.1rem 1rem .7rem; border-bottom:2px solid var(--ink); }
+  header h1{ margin:0; font-size:1.45rem; letter-spacing:.05em; }
+  header .sub{ color:#5c554a; font-style:italic; font-size:.9rem; margin-top:.25rem; }
+  .badge{ display:inline-block; margin-top:.5rem; font-family:ui-monospace,Consolas,monospace; font-size:.66rem;
+          letter-spacing:.1em; text-transform:uppercase; background:var(--pink); color:#ffffff; padding:.15rem .5rem; }
+  main{ max-width:46rem; margin:0 auto; padding:1rem 1rem 2rem; }
+  #msgs{ display:flex; flex-direction:column; gap:.6rem; min-height:60vh; padding-bottom:1rem; }
+  .msg{ max-width:88%; padding:.6rem .8rem; border-radius:.7rem; line-height:1.55; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.bryar{ background:var(--soft); align-self:flex-start; border-left:3px solid var(--accent); }
+  .msg.alada{ background:#fff; align-self:flex-end; border:1px solid var(--pink); }
+  .who{ font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:#6b6355; margin-bottom:.25rem; }
+  #composer{ display:flex; gap:.5rem; position:sticky; bottom:1rem; background:var(--paper); padding-top:1rem; }
+  #input{ flex:1; font-family:inherit; font-size:1rem; padding:.6rem; border:1px solid var(--rule); border-radius:.6rem; background:#fff; }
+  #send{ font-family:inherit; font-size:1rem; padding:.6rem 1rem; background:var(--accent); color:var(--paper); border:none; border-radius:.6rem; cursor:pointer; }
+  .mode{ font-size:.8rem; color:#6b6355; font-style:italic; margin-top:.5rem; text-align:center; }
+  footer{ text-align:center; font-size:.8rem; color:#5c554a; padding:1.2rem 1rem 2rem; border-top:1px solid var(--rule); }
+  .seal{ text-align:center; font-size:1.05rem; letter-spacing:.15em; margin:.4rem 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Aladaz A.I.</h1>
+  <div class="sub">Bryar — web edition</div>
+  <div><span class="badge" id="statusBadge">Connecting…</span></div>
+</header>
+<main>
+  <div id="msgs"></div>
+  <div id="composer">
+    <input id="input" type="text" placeholder="Ask Bryar…" autocomplete="off">
+    <button id="send">Send</button>
+  </div>
+  <div class="mode" id="mode">Loading core from GitHub…</div>
+</main>
+<footer>
+  <div class="seal">🔥📖⚔️🛡️✍️👁️✅</div>
+  "As you go, preach, saying: 'The kingdom of the heavens has drawn near.'" — Matthew 10:7<br>
+  Aladaz A.I. — made by Earl Arthur Sewell for Alada, his daughter.
+</footer>
+
+<script>
+const REPO_USER = "theironrod5880-creator";
+const REPO_NAME = "Aladaz-A.I.";
+const CORE_URL = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/main/mastercore.md`;
+
+const GREETING = "Hi Alada, how are you? What would you like to know about your dad?";
+const $ = s => document.querySelector(s);
+
+let coreText = "";
+let isReady = false;
+let msgs = [{ who:'bryar', text:GREETING }];
+
+function renderMsgs(){
+  const box = $('#msgs'); box.innerHTML = '';
+  msgs.forEach(m=>{
+    const d = document.createElement('div');
+    d.className = 'msg ' + m.who;
+    const w = document.createElement('div'); w.className = 'who';
+    w.textContent = m.who === 'bryar' ? 'Bryar' : 'Alada';
+    const t = document.createElement('div'); t.textContent = m.text;
+    d.appendChild(w); d.appendChild(t); box.appendChild(d);
+  });
+  box.lastElementChild && box.lastElementChild.scrollIntoView({ behavior:'smooth', block:'end' });
+}
+
+async function loadCore() {
+  try {
+    const r = await fetch(CORE_URL);
+    if (!r.ok) throw new Error("Core file not found in repo. Using fallback.");
+    coreText = await r.text();
+    isReady = true;
+    $('#statusBadge').textContent = 'Connected';
+    $('#statusBadge').style.background = '#4a6b2d';
+    $('#mode').textContent = 'Connected — fetching real answers via Pollinations.ai';
+  } catch (e) {
+    console.warn(e);
+    // Fallback minimal core so the page never breaks
+    coreText = "You are Bryar. You teach Alada from her father Earl Arthur Sewell's work. The Floor: Watchtower and JW.org speak first.";
+    isReady = true;
+    $('#statusBadge').textContent = 'Fallback Mode';
+    $('#statusBadge').style.background = '#b35c00';
+    $('#mode').textContent = 'Could not load mastercore.md from the repo. Using local fallback.';
+  }
+}
+
+async function send(text){
+  const q = (text !== undefined ? text : $('#input').value).trim();
+  if (!q || !isReady) return;
+  
+  $('#input').value = ''; 
+  msgs.push({ who:'alada', text:q });
+  renderMsgs();
+
+  // Add thinking indicator
+  msgs.push({ who:'bryar', text:'…' });
+  renderMsgs();
+
+  const systemPrompt = `Your name is Bryar. You are the messenger and teacher for Alada, built on the Mastercore her father, Earl Arthur Sewell, made for her. Speak plainly and warmly to Alada. Here is your core: \n\n${coreText}`;
+  
+  // Format history for API
+  const apiMsgs = [
+    { role: 'system', content: systemPrompt },
+    ...msgs.slice(1, -1).map(m => ({
+      role: m.who === 'bryar' ? 'assistant' : 'user',
+      content: m.text
+    }))
+  ];
+
+  try {
+    // Pollinations.ai free endpoint (no key required)
+    const r = await fetch('https://text.pollinations.ai/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: apiMsgs,
+        model: 'openai'
+      })
+    });
+
+    if (!r.ok) throw new Error('Connection answered ' + r.status);
+    
+    const answer = await r.text();
+    msgs[msgs.length - 1].text = answer; // Replace "…"
+  } catch (e) {
+    msgs[msgs.length - 1].text = "I couldn't reach the free AI just now (" + e.message + "). Check your internet, or open the offline version (aladaz-ai.html).";
+  }
+
+  renderMsgs();
+}
+
+$('#send').onclick = ()=> send();
+$('#input').addEventListener('keydown', e=>{ if (e.key === 'Enter') send(); });
+
+// Init
+renderMsgs();
+loadCore();
+</script>
+</body>
+</html>
